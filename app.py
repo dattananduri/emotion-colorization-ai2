@@ -1,8 +1,3 @@
-# ======================================
-# Emotion Colorization AI - With Color Distribution Analysis + Batch Processing
-# Fully aligned with paper: "Emotion-Based Image Colorization System"
-# ======================================
-
 import streamlit as st
 import torch
 import torch.nn as nn
@@ -21,7 +16,6 @@ st.set_page_config(page_title="Emotion Colorization AI", layout="wide")
 
 # ======================================
 # U-NET MODEL
-# Matches training code exactly (inplace=True as in training)
 # ======================================
 
 class UNetColorizer(nn.Module):
@@ -192,7 +186,7 @@ def colorize_image(model, image):
 
     rgb = cv2.cvtColor(lab_out, cv2.COLOR_LAB2RGB)
 
-    # Bilateral filtering - inference only, not in training (paper Section IV Step 3)
+    # Bilateral filtering
     rgb = cv2.bilateralFilter(rgb, 5, 50, 50)
 
     return rgb
@@ -379,7 +373,6 @@ def analyze_color_distribution(colorized_image):
 
 # ======================================
 # WEIGHTED AFFECTIVE SCORING
-# Paper Section V Step 5:
 #   Affective Score = w1*(a - a0) + w2*(b - b0)
 #   A-channel warmer colours -> positive emotions
 #   B-channel cooler colours -> calmness
@@ -397,8 +390,7 @@ def weighted_emotion_score(image, emotion):
 
     a0 = float(np.mean(a))
     b0 = float(np.mean(b))
-
-    # Heuristic weights per emotion (paper Section V Step 5)
+    
     emotion_weights = {
         "Neutral":   (0.5, 0.5),
         "Happy":     (0.7, 0.3),
@@ -411,7 +403,7 @@ def weighted_emotion_score(image, emotion):
 
     # Correct formula: weighted sum of mean channel intensities
     # (a - a0 always collapses to 0 since mean(x - mean(x)) = 0)
-    # Paper principle: A-channel warm -> positive, B-channel cool -> calm
+
     affective_score = w1 * float(np.mean(a)) + w2 * float(np.mean(b))
 
     return {
@@ -423,16 +415,10 @@ def weighted_emotion_score(image, emotion):
 
 
 # ======================================
-# METRICS CALCULATION
-# Paper Section IV Step 4 - All metrics from Table 1:
-#   MSE, MAE, RMSE, MAPE%, PSNR, SSIM, R²,
-#   Color Accuracy%, Delta E, Chroma Error
-#
 # IMPORTANT: Metrics are computed on normalized AB channels [0,1]
 # exactly matching the training loss computation:
 #   - Training: MSELoss(pred_ab, ab_img) where ab_img = LAB_ab / 255
 #   - Here:     same normalization applied before metric calculation
-# This ensures live metrics match paper Table 1 values directly.
 # ======================================
 
 def calculate_metrics(original, colorized):
@@ -459,7 +445,6 @@ def calculate_metrics(original, colorized):
     col  = cv2.resize(col,  (w, h))
 
     # ── Convert both to LAB and extract AB channels ──────────────────────
-    # This matches training exactly:
     #   ab_img = LAB[:,:,1:] / 255.0  →  [0, 1]
     #   pred_ab = model output (Sigmoid) → [0, 1]
     orig_lab = cv2.cvtColor(orig, cv2.COLOR_RGB2LAB).astype(np.float32)
@@ -542,13 +527,6 @@ def calculate_metrics(original, colorized):
     }
 
 
-# ======================================
-# FEATURE IMPORTANCE VISUALIZATION
-# Paper Section V Step 3:
-#   Gradient-based sensitivity analysis - U-Net sensitive
-#   to local contrast and gradient in L color space
-# ======================================
-
 def visualize_feature_importance(model, image):
     img = np.array(image.convert("RGB"))
     img_small = cv2.resize(img, (150, 150))
@@ -587,12 +565,6 @@ def visualize_feature_importance(model, image):
     plt.close()
     return Image.open(buf)
 
-
-# ======================================
-# COMPARISON TABLE
-# Paper Table 2 - Performance Metrics Comparison
-# ======================================
-
 def create_comparison_table():
     data = {
         "Model": [
@@ -616,7 +588,6 @@ def create_comparison_table():
 # ======================================
 
 def get_emotion_statistics():
-    # All 6 presets matching paper - 6 values each
     emotions  = ["Neutral", "Happy", "Sad", "Cinematic", "Vintage", "Dark"]
     a_scales  = [1.0,       1.2,     0.8,   1.3,         0.9,       1.1   ]
     b_scales  = [1.0,       1.3,     0.7,   0.9,         1.1,       0.8   ]
@@ -1005,9 +976,6 @@ def main():
             if show_metrics:
                 with col1:
                     st.subheader("📏 Image Metrics")
-                    # Compare base colorized (no emotion) vs emotion-filtered result
-                    # Both are RGB images — metrics computed on AB channels [0,1]
-                    # This matches training loss scale (paper Table 1)
                     base_for_metric = st.session_state.base
                     metrics = calculate_metrics(
                         Image.fromarray(base_for_metric.astype(np.uint8)),
@@ -1092,8 +1060,6 @@ def main():
             - Higher MSE than Standard U-Net is expected: two-domain training (14,500+ images)
               and emotion post-processing intentionally shift color attributes
             """)
-
-        # Generalization analysis values from paper
         st.subheader("Generalization Analysis")
         gen_col1, gen_col2, gen_col3, gen_col4, gen_col5 = st.columns(5)
         gen_col1.metric("Mean Gen. Gap",   "0.000918")
@@ -1105,7 +1071,6 @@ def main():
         # Training progress plot
         st.subheader("Training Progress (150 Epochs)")
 
-        # Try to load real training log if saved alongside the model
         import os
         log_path = "training_log.npz"
         if os.path.exists(log_path):
